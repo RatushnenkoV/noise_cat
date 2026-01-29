@@ -59,7 +59,7 @@ decayInput.addEventListener('input', (e) => {
 
 function updateView(stateData) {
     // Change image
-    catImage.src = `/assets/cats/${stateData.image}`;
+    catImage.src = `assets/cats/${stateData.image}`;
 
     // Change text
     statusBubble.textContent = stateData.text;
