@@ -1,6 +1,13 @@
 import { AudioMonitor } from './audio/AudioMonitor.js';
 import { StateMachine } from './logic/StateMachine.js';
 
+// Import assets explicitly for Vite to handle paths
+import imgSleep from './assets/cats/sleep.png';
+import imgCalm from './assets/cats/calm.png';
+import imgAnxious from './assets/cats/anxious.png';
+import imgIrritated from './assets/cats/irritated.png';
+import imgPanic from './assets/cats/panic.png';
+
 const app = document.getElementById('app');
 const catImage = document.getElementById('cat-image');
 const statusBubble = document.getElementById('status-bubble');
@@ -18,6 +25,16 @@ const sensitivityVal = document.getElementById('sensitivity-val');
 const decayVal = document.getElementById('decay-val');
 
 const audioMonitor = new AudioMonitor();
+
+// Map states to imported images
+const stateImages = {
+    SLEEP: imgSleep,
+    CALM: imgCalm,
+    ANXIOUS: imgAnxious,
+    IRRITATED: imgIrritated,
+    PANIC: imgPanic
+};
+
 const stateMachine = new StateMachine({
     onStateChange: (stateData) => {
         updateView(stateData);
@@ -58,8 +75,16 @@ decayInput.addEventListener('input', (e) => {
 });
 
 function updateView(stateData) {
-    // Change image
-    catImage.src = `assets/cats/${stateData.image}`;
+    // Change image using the map
+    // stateData.image contains the filename (e.g., 'sleep.png') from StateMachine.js
+    // We need to map the state key (SLEEP) to the imported image
+    // However, StateMachine passes object { min, image, class, text }
+    // We need to know which state we are in.
+    // Let's modify logic: stateMachine.state holds the current state key string.
+
+    // Better yet, update StateMachine to just return the key, or we use stateMachine.state here.
+    const currentStateKey = stateMachine.state;
+    catImage.src = stateImages[currentStateKey];
 
     // Change text
     statusBubble.textContent = stateData.text;
