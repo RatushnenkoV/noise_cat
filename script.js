@@ -69,34 +69,48 @@ class StateMachine {
 
         // Default settings
         this.sensitivity = 1.0; // Multiplier for volume
-        this.transitionTime = 3; // Seconds to calm down from max stress
-        this.decay = 100 / (3 * 60); // Default decay based on 3s
-        this.threshold = 10; // Volume threshold to start accumulating stress
+        this.stateDuration = 5; // Seconds to traverse a state
+
+        // Default thresholds
+        this.thresholds = {
+            SLEEP: 10,     // Sleep -> Calm
+            CALM: 30,      // Calm -> Anxious
+            ANXIOUS: 60,   // Anxious -> Irritated
+            IRRITATED: 90  // Irritated -> Panic
+        };
+
+        this.volumeThreshold = 10; // Volume threshold to start accumulating stress
 
         // Load settings from localStorage
         this.loadSettings();
-
-        this.states = {
-            SLEEP: { min: 0, image: 'sleep.png', class: 'state-sleep', text: "Zzz..." },
-            CALM: { min: 10, image: 'calm.png', class: 'state-calm', text: "Meow" },
-            ANXIOUS: { min: 30, image: 'anxious.png', class: 'state-anxious', text: "O_O" },
-            IRRITATED: { min: 60, image: 'irritated.png', class: 'state-irritated', text: "Grrr!" },
-            PANIC: { min: 90, image: 'panic.png', class: 'state-panic', text: "AAAAH!!!" }
-        };
     }
 
     update(volume) {
-        // volume is 0-255 roughly (average from AudioMonitor)
+        // Find current state range
+        const currentRange = this.getCurrentStateRange();
+        const stateWidth = currentRange.max - currentRange.min;
 
-        if (volume > this.threshold) {
-            // Add stress based on volume excess and sensitivity
-            // Dampened significantly: * 0.005 instead of 0.05
-            // This makes it take longer to get angry
-            const addedStress = (volume - this.threshold) * this.sensitivity * 0.005;
-            this.stress += addedStress;
+        // Calculate rate per frame (assuming 60fps)
+        // We want to traverse 'stateWidth' in 'stateDuration' seconds
+        const rate = stateWidth / (this.stateDuration * 60);
+
+        if (volume > this.volumeThreshold) {
+            // Add stress
+            // We use sensitivity to potentially speed up if volume is VERY loud, 
+            // but the base expectation is based on time.
+            // Let's say if volume is just above threshold, we move at 'rate'.
+            // If it's huge, maybe we move faster? 
+            // The user said: "5 seconds to wake up". This implies a fixed time concept.
+            // But usually noise meters react to intensity. 
+            // Let's stick strictly to time for now as requested: "5 seconds to transition".
+            // We will multiply by sensitivity only if the user wants it faster/slower overall?
+            // Actually, the user requirement is "5 seconds to transition". 
+            // So let's make it fixed rate regardless of HOW loud (as long as it's over threshold).
+            this.stress += rate;
         } else {
             // Decay
-            this.stress -= this.decay;
+            // "5 seconds to calm down"
+            this.stress -= rate;
         }
 
         // Clamp
@@ -111,46 +125,68 @@ class StateMachine {
         };
     }
 
-    determineState() {
-        let newState = this.state;
+    getCurrentStateRange() {
+        // Return the min/max stress for the CURRENT state context
+        // This is complex because if we correspond strictly to 0-100, 
+        // the "width" changes depending on where we are.
 
-        if (this.stress >= 90) newState = 'PANIC';
-        else if (this.stress >= 60) newState = 'IRRITATED';
-        else if (this.stress >= 30) newState = 'ANXIOUS';
-        else if (this.stress >= 10) newState = 'CALM';
+        // If stress is 5 (SLEEP), width is (10 - 0) = 10.
+        // If stress is 20 (CALM), width is (30 - 10) = 20.
+
+        if (this.stress < this.thresholds.SLEEP) return { min: 0, max: this.thresholds.SLEEP };
+        if (this.stress < this.thresholds.CALM) return { min: this.thresholds.SLEEP, max: this.thresholds.CALM };
+        if (this.stress < this.thresholds.ANXIOUS) return { min: this.thresholds.CALM, max: this.thresholds.ANXIOUS };
+        if (this.stress < this.thresholds.IRRITATED) return { min: this.thresholds.ANXIOUS, max: this.thresholds.IRRITATED };
+        return { min: this.thresholds.IRRITATED, max: 100 };
+    }
+
+    determineState() {
+        let newState = 'SLEEP'; // Default
+
+        if (this.stress >= this.thresholds.IRRITATED) newState = 'PANIC';
+        else if (this.stress >= this.thresholds.ANXIOUS) newState = 'IRRITATED';
+        else if (this.stress >= this.thresholds.CALM) newState = 'ANXIOUS';
+        else if (this.stress >= this.thresholds.SLEEP) newState = 'CALM';
         else newState = 'SLEEP';
 
         if (newState !== this.state) {
             this.state = newState;
             if (this.callbacks.onStateChange) {
-                this.callbacks.onStateChange(this.states[this.state]);
+                this.callbacks.onStateChange(newState);
             }
         }
     }
 
-    setSettings(sensitivity, transitionTime) {
-        this.sensitivity = sensitivity;
-        this.transitionTime = transitionTime;
-        // Calculate decay to drop from 100 to 0 in transitionTime seconds (assuming 60fps)
-        this.decay = this.maxStress / (Math.max(0.1, this.transitionTime) * 60);
+    setSettings(settings) {
+        if (settings.sensitivity !== undefined) this.sensitivity = settings.sensitivity;
+        if (settings.duration !== undefined) this.stateDuration = settings.duration;
 
-        // Save to localStorage
-        localStorage.setItem('noise_cat_settings', JSON.stringify({
+        if (settings.limits) {
+            this.thresholds.SLEEP = settings.limits.sleep;
+            this.thresholds.CALM = settings.limits.calm;
+            this.thresholds.ANXIOUS = settings.limits.anxious;
+            this.thresholds.IRRITATED = settings.limits.irritated;
+        }
+
+        this.saveSettings();
+    }
+
+    saveSettings() {
+        localStorage.setItem('noise_cat_settings_v2', JSON.stringify({
             sensitivity: this.sensitivity,
-            transitionTime: this.transitionTime
+            duration: this.stateDuration,
+            thresholds: this.thresholds
         }));
     }
 
     loadSettings() {
-        const saved = localStorage.getItem('noise_cat_settings');
+        const saved = localStorage.getItem('noise_cat_settings_v2');
         if (saved) {
             try {
                 const settings = JSON.parse(saved);
                 if (settings.sensitivity) this.sensitivity = settings.sensitivity;
-                if (settings.transitionTime) this.transitionTime = settings.transitionTime;
-
-                // Recalculate decay
-                this.decay = this.maxStress / (Math.max(0.1, this.transitionTime) * 60);
+                if (settings.duration) this.stateDuration = settings.duration;
+                if (settings.thresholds) this.thresholds = settings.thresholds;
             } catch (e) {
                 console.error("Failed to load settings", e);
             }
@@ -158,17 +194,18 @@ class StateMachine {
     }
 }
 
+
 /**
  * Main Application Logic
  */
 
-// Image paths
-const stateImages = {
-    SLEEP: './assets/cats/sleep.png',
-    CALM: './assets/cats/calm.png',
-    ANXIOUS: './assets/cats/anxious.png',
-    IRRITATED: './assets/cats/irritated.png',
-    PANIC: './assets/cats/panic.png'
+// Image paths and State Data
+const STATE_DATA = {
+    SLEEP: { image: './assets/cats/sleep.png', class: 'state-sleep', text: "Zzz..." },
+    CALM: { image: './assets/cats/calm.png', class: 'state-calm', text: "Meow" },
+    ANXIOUS: { image: './assets/cats/anxious.png', class: 'state-anxious', text: "O_O" },
+    IRRITATED: { image: './assets/cats/irritated.png', class: 'state-irritated', text: "Grrr!" },
+    PANIC: { image: './assets/cats/panic.png', class: 'state-panic', text: "AAAAH!!!" }
 };
 
 const app = document.getElementById('app');
@@ -183,15 +220,29 @@ const closeSettingsBtn = document.getElementById('close-settings');
 const settingsPanel = document.getElementById('settings-panel');
 
 const sensitivityInput = document.getElementById('sensitivity');
-const decayInput = document.getElementById('decay');
 const sensitivityVal = document.getElementById('sensitivity-val');
-const decayVal = document.getElementById('decay-val');
+
+const durationInput = document.getElementById('duration');
+const durationVal = document.getElementById('duration-val');
+
+const limitSleepInput = document.getElementById('limit-sleep');
+const limitSleepVal = document.getElementById('limit-sleep-val');
+
+const limitCalmInput = document.getElementById('limit-calm');
+const limitCalmVal = document.getElementById('limit-calm-val');
+
+const limitAnxiousInput = document.getElementById('limit-anxious');
+const limitAnxiousVal = document.getElementById('limit-anxious-val');
+
+const limitIrritatedInput = document.getElementById('limit-irritated');
+const limitIrritatedVal = document.getElementById('limit-irritated-val');
+
 
 const audioMonitor = new AudioMonitor();
 
 const stateMachine = new StateMachine({
-    onStateChange: (stateData) => {
-        updateView(stateData);
+    onStateChange: (stateKey) => {
+        updateView(stateKey);
     }
 });
 
@@ -217,31 +268,56 @@ closeSettingsBtn.addEventListener('click', () => {
     settingsPanel.classList.add('hidden');
 });
 
-sensitivityInput.addEventListener('input', (e) => {
-    const val = parseFloat(e.target.value);
-    sensitivityVal.textContent = val.toFixed(1);
-    stateMachine.setSettings(val, parseFloat(decayInput.value));
+// Settings Event Listeners
+function updateSettings() {
+    const sensitivity = parseFloat(sensitivityInput.value);
+    const duration = parseFloat(durationInput.value);
+    const limits = {
+        sleep: parseFloat(limitSleepInput.value),
+        calm: parseFloat(limitCalmInput.value),
+        anxious: parseFloat(limitAnxiousInput.value),
+        irritated: parseFloat(limitIrritatedInput.value)
+    };
+
+    // Update Display Values
+    sensitivityVal.textContent = sensitivity.toFixed(1);
+    durationVal.textContent = duration.toFixed(0);
+    limitSleepVal.textContent = limits.sleep;
+    limitCalmVal.textContent = limits.calm;
+    limitAnxiousVal.textContent = limits.anxious;
+    limitIrritatedVal.textContent = limits.irritated;
+
+    // Validate logic: Thresholds must be in order
+    // We won't force them in UI but we rely on them being ordered for logic to work perfectly.
+    // Ideally we'd clamp them. For now let's just send them.
+
+    stateMachine.setSettings({
+        sensitivity,
+        duration,
+        limits
+    });
+}
+
+[sensitivityInput, durationInput, limitSleepInput, limitCalmInput, limitAnxiousInput, limitIrritatedInput].forEach(input => {
+    input.addEventListener('input', updateSettings);
 });
 
-decayInput.addEventListener('input', (e) => {
-    const val = parseFloat(e.target.value);
-    decayVal.textContent = val.toFixed(0);
-    stateMachine.setSettings(parseFloat(sensitivityInput.value), val);
-});
 
-function updateView(stateData) {
-    const currentStateKey = stateMachine.state;
-    catImage.src = stateImages[currentStateKey];
+function updateView(stateKey) {
+    const data = STATE_DATA[stateKey];
+    if (!data) return;
+
+    catImage.src = data.image;
 
     // Change text
-    statusBubble.textContent = stateData.text;
+    statusBubble.textContent = data.text;
     statusBubble.classList.add('visible');
 
     // Change background class
-    document.body.className = stateData.class;
+    document.body.className = data.class;
 
     // Shake effect for high stress
-    if (stateData.class === 'state-panic' || stateData.class === 'state-irritated') {
+    if (stateKey === 'PANIC' || stateKey === 'IRRITATED') {
         catImage.classList.add('shake');
     } else {
         catImage.classList.remove('shake');
@@ -253,22 +329,38 @@ function loop() {
     const result = stateMachine.update(volume);
 
     // Update meter
-    const percent = Math.min(100, Math.max(0, (volume / 255) * 100 * 3)); // *3 to make it more visible
+    // We visualize stress (0-100)
+    const percent = Math.min(100, Math.max(0, result.stress));
     meterFill.style.width = `${percent}%`;
+
+    // Optional: show volume
     volumeDisplay.textContent = Math.round(volume);
 
     animationFrameId = requestAnimationFrame(loop);
 }
 
 // Initial state load
-updateView(stateMachine.states.SLEEP);
+updateView('SLEEP');
 
 // Initialize inputs with loaded settings
 if (stateMachine.sensitivity) {
     sensitivityInput.value = stateMachine.sensitivity;
     sensitivityVal.textContent = stateMachine.sensitivity.toFixed(1);
 }
-if (stateMachine.transitionTime) {
-    decayInput.value = stateMachine.transitionTime;
-    decayVal.textContent = stateMachine.transitionTime.toFixed(0);
+if (stateMachine.stateDuration) {
+    durationInput.value = stateMachine.stateDuration;
+    durationVal.textContent = stateMachine.stateDuration.toFixed(0);
+}
+if (stateMachine.thresholds) {
+    limitSleepInput.value = stateMachine.thresholds.SLEEP;
+    limitSleepVal.textContent = stateMachine.thresholds.SLEEP;
+
+    limitCalmInput.value = stateMachine.thresholds.CALM;
+    limitCalmVal.textContent = stateMachine.thresholds.CALM;
+
+    limitAnxiousInput.value = stateMachine.thresholds.ANXIOUS;
+    limitAnxiousVal.textContent = stateMachine.thresholds.ANXIOUS;
+
+    limitIrritatedInput.value = stateMachine.thresholds.IRRITATED;
+    limitIrritatedVal.textContent = stateMachine.thresholds.IRRITATED;
 }

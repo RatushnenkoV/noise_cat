@@ -52,7 +52,7 @@ body.state-panic {
 }
 
 .cat-image {
-  max-width: 300px;
+  max-width: 100%;
   height: auto;
   filter: drop-shadow(0 10px 20px rgba(0, 0, 0, 0.1));
   transition: transform 0.3s ease, filter 0.3s ease;
@@ -76,7 +76,7 @@ body.state-panic {
   opacity: 1;
 }
 
-.controls button {
+button {
   background: white;
   border: none;
   padding: 10px 20px;
@@ -89,7 +89,7 @@ body.state-panic {
   transition: transform 0.1s, box-shadow 0.1s;
 }
 
-.controls button:hover {
+button:hover {
   transform: translateY(-2px);
   box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
 }
@@ -97,7 +97,7 @@ body.state-panic {
 #settings-btn {
   position: absolute;
   top: 20px;
-  left: 20px;
+  right: 20px;
   opacity: 0.5;
   margin: 0;
   z-index: 10;

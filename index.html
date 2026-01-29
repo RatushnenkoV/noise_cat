@@ -11,7 +11,9 @@
 </head>
 
 <body>
+    <button id="settings-btn">⚙️ Settings</button>
     <div id="app">
+
         <div id="cat-container" class="cat-container">
             <!-- Cat image will be injected here -->
             <img id="cat-image" src="./assets/cats/sleep.png" alt="Sleeping Cat" class="cat-image" />
@@ -20,7 +22,6 @@
 
         <div class="controls">
             <button id="start-btn">Start Listening</button>
-            <button id="settings-btn">⚙️ Settings</button>
         </div>
 
         <div id="settings-panel" class="settings-panel hidden">
@@ -30,8 +31,24 @@
                 <input type="range" id="sensitivity" min="0.01" max="5.0" step="0.01" value="1.0">
             </div>
             <div class="setting-group">
-                <label>Transition Time (seconds): <span id="decay-val">3</span></label>
-                <input type="range" id="decay" min="1" max="30" step="1" value="3">
+                <label>State Duration (sec): <span id="duration-val">5</span></label>
+                <input type="range" id="duration" min="1" max="60" step="1" value="5">
+            </div>
+            <div class="setting-group">
+                <label>Sleep Limit: <span id="limit-sleep-val">10</span></label>
+                <input type="range" id="limit-sleep" min="1" max="97" step="1" value="10">
+            </div>
+            <div class="setting-group">
+                <label>Calm Limit: <span id="limit-calm-val">30</span></label>
+                <input type="range" id="limit-calm" min="1" max="98" step="1" value="30">
+            </div>
+            <div class="setting-group">
+                <label>Anxious Limit: <span id="limit-anxious-val">60</span></label>
+                <input type="range" id="limit-anxious" min="1" max="99" step="1" value="60">
+            </div>
+            <div class="setting-group">
+                <label>Irritated Limit: <span id="limit-irritated-val">90</span></label>
+                <input type="range" id="limit-irritated" min="1" max="100" step="1" value="90">
             </div>
             <div class="setting-group">
                 <label>Current Volume: <span id="volume-display">0</span></label>
