@@ -73,6 +73,9 @@ class StateMachine {
         this.decay = 100 / (3 * 60); // Default decay based on 3s
         this.threshold = 10; // Volume threshold to start accumulating stress
 
+        // Load settings from localStorage
+        this.loadSettings();
+
         this.states = {
             SLEEP: { min: 0, image: 'sleep.png', class: 'state-sleep', text: "Zzz..." },
             CALM: { min: 10, image: 'calm.png', class: 'state-calm', text: "Meow" },
@@ -87,7 +90,9 @@ class StateMachine {
 
         if (volume > this.threshold) {
             // Add stress based on volume excess and sensitivity
-            const addedStress = (volume - this.threshold) * this.sensitivity * 0.05;
+            // Dampened significantly: * 0.005 instead of 0.05
+            // This makes it take longer to get angry
+            const addedStress = (volume - this.threshold) * this.sensitivity * 0.005;
             this.stress += addedStress;
         } else {
             // Decay
@@ -128,6 +133,28 @@ class StateMachine {
         this.transitionTime = transitionTime;
         // Calculate decay to drop from 100 to 0 in transitionTime seconds (assuming 60fps)
         this.decay = this.maxStress / (Math.max(0.1, this.transitionTime) * 60);
+
+        // Save to localStorage
+        localStorage.setItem('noise_cat_settings', JSON.stringify({
+            sensitivity: this.sensitivity,
+            transitionTime: this.transitionTime
+        }));
+    }
+
+    loadSettings() {
+        const saved = localStorage.getItem('noise_cat_settings');
+        if (saved) {
+            try {
+                const settings = JSON.parse(saved);
+                if (settings.sensitivity) this.sensitivity = settings.sensitivity;
+                if (settings.transitionTime) this.transitionTime = settings.transitionTime;
+
+                // Recalculate decay
+                this.decay = this.maxStress / (Math.max(0.1, this.transitionTime) * 60);
+            } catch (e) {
+                console.error("Failed to load settings", e);
+            }
+        }
     }
 }
 
@@ -235,3 +262,13 @@ function loop() {
 
 // Initial state load
 updateView(stateMachine.states.SLEEP);
+
+// Initialize inputs with loaded settings
+if (stateMachine.sensitivity) {
+    sensitivityInput.value = stateMachine.sensitivity;
+    sensitivityVal.textContent = stateMachine.sensitivity.toFixed(1);
+}
+if (stateMachine.transitionTime) {
+    decayInput.value = stateMachine.transitionTime;
+    decayVal.textContent = stateMachine.transitionTime.toFixed(0);
+}

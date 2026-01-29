@@ -97,7 +97,7 @@ body.state-panic {
 #settings-btn {
   position: absolute;
   top: 20px;
-  right: 20px;
+  left: 20px;
   opacity: 0.5;
   margin: 0;
   z-index: 10;
